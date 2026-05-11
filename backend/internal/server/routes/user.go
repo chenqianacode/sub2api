@@ -17,6 +17,14 @@ func RegisterUserRoutes(
 ) {
 	authenticated := v1.Group("")
 	authenticated.Use(gin.HandlerFunc(jwtAuth))
+	// 用量总览需要普通用户和管理员均可访问，因此只要求登录鉴权。
+	usageOverview := authenticated.Group("/usage-overview")
+	{
+		usageOverview.GET("/summary", h.Usage.UsageOverviewSummary)
+		usageOverview.GET("/users", h.Usage.UsageOverviewUsers)
+		usageOverview.GET("/accounts", h.Usage.UsageOverviewAccounts)
+	}
+
 	authenticated.Use(middleware.BackendModeUserGuard(settingService))
 	{
 		// 用户接口

@@ -333,6 +333,33 @@ func (s *UsageService) GetBatchAPIKeyUsageStats(ctx context.Context, apiKeyIDs [
 	return stats, nil
 }
 
+// GetUsageOverviewSummary returns shared global aggregate usage stats.
+func (s *UsageService) GetUsageOverviewSummary(ctx context.Context, startTime, endTime, todayStart time.Time) (*usagestats.UsageOverviewSummary, error) {
+	stats, err := s.usageRepo.GetUsageOverviewSummary(ctx, startTime, endTime, todayStart)
+	if err != nil {
+		return nil, fmt.Errorf("get usage overview summary: %w", err)
+	}
+	return stats, nil
+}
+
+// ListUsageOverviewUsers returns aggregate usage rows grouped by user.
+func (s *UsageService) ListUsageOverviewUsers(ctx context.Context, startTime, endTime, todayStart time.Time, page, pageSize int) ([]usagestats.UsageOverviewUserItem, int64, error) {
+	items, total, err := s.usageRepo.ListUsageOverviewUsers(ctx, startTime, endTime, todayStart, page, pageSize)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list usage overview users: %w", err)
+	}
+	return items, total, nil
+}
+
+// ListUsageOverviewAccounts returns aggregate usage rows grouped by upstream account.
+func (s *UsageService) ListUsageOverviewAccounts(ctx context.Context, startTime, endTime, todayStart time.Time, page, pageSize int) ([]usagestats.UsageOverviewAccountItem, int64, error) {
+	items, total, err := s.usageRepo.ListUsageOverviewAccounts(ctx, startTime, endTime, todayStart, page, pageSize)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list usage overview accounts: %w", err)
+	}
+	return items, total, nil
+}
+
 // ListWithFilters lists usage logs with admin filters.
 func (s *UsageService) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters usagestats.UsageLogFilters) ([]UsageLog, *pagination.PaginationResult, error) {
 	logs, result, err := s.usageRepo.ListWithFilters(ctx, params, filters)

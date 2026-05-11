@@ -58,6 +58,66 @@ export interface ModelStatsResponse {
   end_date: string
 }
 
+export interface UsageOverviewSummary {
+  total_requests: number
+  total_users: number
+  active_users: number
+  total_accounts: number
+  active_accounts: number
+  input_tokens: number
+  output_tokens: number
+  cache_tokens: number
+  total_tokens: number
+  total_cost: number
+  total_actual_cost: number
+  total_account_cost: number
+  today_requests: number
+  today_cost: number
+}
+
+export interface UsageOverviewUserItem {
+  user_id?: number
+  username?: string
+  email?: string
+  anonymous_user?: string
+  total_requests: number
+  input_tokens: number
+  output_tokens: number
+  cache_tokens: number
+  total_tokens: number
+  total_cost: number
+  total_actual_cost?: number
+  today_cost: number
+  last_used_at?: string
+}
+
+export interface UsageOverviewAccountItem {
+  account_id?: number
+  name?: string
+  email?: string
+  anonymous_account?: string
+  platform?: string
+  type?: string
+  status?: string
+  total_requests: number
+  input_tokens: number
+  output_tokens: number
+  cache_tokens: number
+  total_tokens: number
+  total_cost: number
+  total_actual_cost?: number
+  total_account_cost: number
+  today_cost: number
+  last_used_at?: string
+}
+
+export interface UsageOverviewParams {
+  page?: number
+  page_size?: number
+  start_date?: string
+  end_date?: string
+}
+
 /**
  * List usage logs with optional filters
  * @param page - Page number (default: 1)
@@ -223,6 +283,33 @@ export async function getDashboardModels(params?: {
   return data
 }
 
+export async function getUsageOverviewSummary(
+  params?: Pick<UsageOverviewParams, 'start_date' | 'end_date'>
+): Promise<UsageOverviewSummary> {
+  const { data } = await apiClient.get<UsageOverviewSummary>('/usage-overview/summary', { params })
+  return data
+}
+
+export async function getUsageOverviewUsers(
+  params?: UsageOverviewParams
+): Promise<PaginatedResponse<UsageOverviewUserItem>> {
+  const { data } = await apiClient.get<PaginatedResponse<UsageOverviewUserItem>>(
+    '/usage-overview/users',
+    { params }
+  )
+  return data
+}
+
+export async function getUsageOverviewAccounts(
+  params?: UsageOverviewParams
+): Promise<PaginatedResponse<UsageOverviewAccountItem>> {
+  const { data } = await apiClient.get<PaginatedResponse<UsageOverviewAccountItem>>(
+    '/usage-overview/accounts',
+    { params }
+  )
+  return data
+}
+
 export interface BatchApiKeyUsageStats {
   api_key_id: number
   today_actual_cost: number
@@ -268,6 +355,9 @@ export const usageAPI = {
   getDashboardStats,
   getDashboardTrend,
   getDashboardModels,
+  getUsageOverviewSummary,
+  getUsageOverviewUsers,
+  getUsageOverviewAccounts,
   getDashboardApiKeysUsage
 }
 

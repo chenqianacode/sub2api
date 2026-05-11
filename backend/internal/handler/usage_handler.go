@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -296,6 +297,146 @@ func parseUserTimeRange(c *gin.Context) (time.Time, time.Time) {
 	}
 
 	return startTime, endTime
+}
+
+// parseUsageOverviewTimeRange parses overview date range with a 30-day default.
+func parseUsageOverviewTimeRange(c *gin.Context) (time.Time, time.Time) {
+	userTZ := c.Query("timezone")
+	now := timezone.NowInUserLocation(userTZ)
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
+
+	var startTime, endTime time.Time
+	if startDate != "" {
+		if t, err := timezone.ParseInUserLocation("2006-01-02", startDate, userTZ); err == nil {
+			startTime = t
+		} else {
+			startTime = timezone.StartOfDayInUserLocation(now.AddDate(0, 0, -30), userTZ)
+		}
+	} else {
+		startTime = timezone.StartOfDayInUserLocation(now.AddDate(0, 0, -30), userTZ)
+	}
+
+	if endDate != "" {
+		if t, err := timezone.ParseInUserLocation("2006-01-02", endDate, userTZ); err == nil {
+			endTime = t.AddDate(0, 0, 1)
+		} else {
+			endTime = timezone.StartOfDayInUserLocation(now.AddDate(0, 0, 1), userTZ)
+		}
+	} else {
+		endTime = timezone.StartOfDayInUserLocation(now.AddDate(0, 0, 1), userTZ)
+	}
+
+	return startTime, endTime
+}
+
+func usageOverviewTodayStart(c *gin.Context) time.Time {
+	userTZ := c.Query("timezone")
+	return timezone.StartOfDayInUserLocation(timezone.NowInUserLocation(userTZ), userTZ)
+}
+
+func usageOverviewIsAdmin(c *gin.Context) bool {
+	role, ok := middleware2.GetUserRoleFromContext(c)
+	return ok && role == "admin"
+}
+
+func anonymizeUsageOverviewUsers(items []usagestats.UsageOverviewUserItem, page, pageSize int) {
+	start := (page-1)*pageSize + 1
+	if start < 1 {
+		start = 1
+	}
+	for i := range items {
+		items[i].UserID = 0
+		items[i].Username = ""
+		items[i].Email = ""
+		items[i].AnonymousUser = fmt.Sprintf("User #%d", start+i)
+		items[i].TotalActualCost = 0
+		items[i].LastUsedAt = nil
+	}
+}
+
+func anonymizeUsageOverviewAccounts(items []usagestats.UsageOverviewAccountItem, page, pageSize int) {
+	start := (page-1)*pageSize + 1
+	if start < 1 {
+		start = 1
+	}
+	for i := range items {
+		platform := strings.TrimSpace(items[i].Platform)
+		if platform == "" {
+			platform = "Account"
+		}
+		items[i].AccountID = 0
+		items[i].Name = ""
+		items[i].Email = ""
+		items[i].AnonymousAccount = fmt.Sprintf("%s #%d", platform, start+i)
+		items[i].TotalActualCost = 0
+		items[i].LastUsedAt = nil
+	}
+}
+
+// UsageOverviewSummary handles global usage summary visible to authenticated users.
+// GET /api/v1/usage-overview/summary
+func (h *UsageHandler) UsageOverviewSummary(c *gin.Context) {
+	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	startTime, endTime := parseUsageOverviewTimeRange(c)
+	todayStart := usageOverviewTodayStart(c)
+	stats, err := h.usageService.GetUsageOverviewSummary(c.Request.Context(), startTime, endTime, todayStart)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, stats)
+}
+
+// UsageOverviewUsers handles aggregate user usage visible to authenticated users.
+// GET /api/v1/usage-overview/users
+func (h *UsageHandler) UsageOverviewUsers(c *gin.Context) {
+	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	page, pageSize := response.ParsePagination(c)
+	startTime, endTime := parseUsageOverviewTimeRange(c)
+	todayStart := usageOverviewTodayStart(c)
+	items, total, err := h.usageService.ListUsageOverviewUsers(c.Request.Context(), startTime, endTime, todayStart, page, pageSize)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !usageOverviewIsAdmin(c) {
+		anonymizeUsageOverviewUsers(items, page, pageSize)
+	}
+
+	response.Paginated(c, items, total, page, pageSize)
+}
+
+// UsageOverviewAccounts handles aggregate account usage visible to authenticated users.
+// GET /api/v1/usage-overview/accounts
+func (h *UsageHandler) UsageOverviewAccounts(c *gin.Context) {
+	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+
+	page, pageSize := response.ParsePagination(c)
+	startTime, endTime := parseUsageOverviewTimeRange(c)
+	todayStart := usageOverviewTodayStart(c)
+	items, total, err := h.usageService.ListUsageOverviewAccounts(c.Request.Context(), startTime, endTime, todayStart, page, pageSize)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !usageOverviewIsAdmin(c) {
+		anonymizeUsageOverviewAccounts(items, page, pageSize)
+	}
+
+	response.Paginated(c, items, total, page, pageSize)
 }
 
 // DashboardStats handles getting user dashboard statistics

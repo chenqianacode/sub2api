@@ -279,6 +279,65 @@ type BatchAPIKeyUsageStats struct {
 	TotalActualCost float64 `json:"total_actual_cost"`
 }
 
+// UsageOverviewSummary represents global aggregate usage visible on the shared
+// usage overview page.
+type UsageOverviewSummary struct {
+	TotalRequests    int64   `json:"total_requests"`
+	TotalUsers       int64   `json:"total_users"`
+	ActiveUsers      int64   `json:"active_users"`
+	TotalAccounts    int64   `json:"total_accounts"`
+	ActiveAccounts   int64   `json:"active_accounts"`
+	InputTokens      int64   `json:"input_tokens"`
+	OutputTokens     int64   `json:"output_tokens"`
+	CacheTokens      int64   `json:"cache_tokens"`
+	TotalTokens      int64   `json:"total_tokens"`
+	TotalCost        float64 `json:"total_cost"`
+	TotalActualCost  float64 `json:"total_actual_cost"`
+	TotalAccountCost float64 `json:"total_account_cost"`
+	TodayRequests    int64   `json:"today_requests"`
+	TodayCost        float64 `json:"today_cost"`
+}
+
+// UsageOverviewUserItem represents per-user aggregate usage. Identity fields
+// are omitted for non-admin callers and replaced by AnonymousUser.
+type UsageOverviewUserItem struct {
+	UserID          int64      `json:"user_id,omitempty"`
+	Username        string     `json:"username,omitempty"`
+	Email           string     `json:"email,omitempty"`
+	AnonymousUser   string     `json:"anonymous_user,omitempty"`
+	TotalRequests   int64      `json:"total_requests"`
+	InputTokens     int64      `json:"input_tokens"`
+	OutputTokens    int64      `json:"output_tokens"`
+	CacheTokens     int64      `json:"cache_tokens"`
+	TotalTokens     int64      `json:"total_tokens"`
+	TotalCost       float64    `json:"total_cost"`
+	TotalActualCost float64    `json:"total_actual_cost,omitempty"`
+	TodayCost       float64    `json:"today_cost"`
+	LastUsedAt      *time.Time `json:"last_used_at,omitempty"`
+}
+
+// UsageOverviewAccountItem represents per-account aggregate usage. Sensitive
+// account identity fields are omitted for non-admin callers.
+type UsageOverviewAccountItem struct {
+	AccountID        int64      `json:"account_id,omitempty"`
+	Name             string     `json:"name,omitempty"`
+	Email            string     `json:"email,omitempty"`
+	AnonymousAccount string     `json:"anonymous_account,omitempty"`
+	Platform         string     `json:"platform,omitempty"`
+	Type             string     `json:"type,omitempty"`
+	Status           string     `json:"status,omitempty"`
+	TotalRequests    int64      `json:"total_requests"`
+	InputTokens      int64      `json:"input_tokens"`
+	OutputTokens     int64      `json:"output_tokens"`
+	CacheTokens      int64      `json:"cache_tokens"`
+	TotalTokens      int64      `json:"total_tokens"`
+	TotalCost        float64    `json:"total_cost"`
+	TotalActualCost  float64    `json:"total_actual_cost,omitempty"`
+	TotalAccountCost float64    `json:"total_account_cost"`
+	TodayCost        float64    `json:"today_cost"`
+	LastUsedAt       *time.Time `json:"last_used_at,omitempty"`
+}
+
 // AccountUsageHistory represents daily usage history for an account
 type AccountUsageHistory struct {
 	Date       string  `json:"date"`
