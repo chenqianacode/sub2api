@@ -15,7 +15,7 @@ services:
   # ===========================================================================
   # Sub2API Application
   # ===========================================================================
-  sub2api:
+  sub2api-local:
     image: ${SUB2API_IMAGE:-sub2api:local}
     build:
       context: ..
@@ -23,7 +23,7 @@ services:
       args:
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
         GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
-    container_name: sub2api
+    container_name: sub2api-local
     restart: unless-stopped
     ulimits:
       nofile:

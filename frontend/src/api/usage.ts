@@ -111,6 +111,25 @@ export interface UsageOverviewAccountItem {
   last_used_at?: string
 }
 
+export interface DashboardUsageOverviewUserItem {
+  user_id: number
+  username?: string
+  email?: string
+  today_cost: number
+  week_cost: number
+  month_cost: number
+  total_cost: number
+  today_requests: number
+  week_requests: number
+  month_requests: number
+  total_requests: number
+  last_used_at?: string
+}
+
+export interface DashboardUsageOverviewResponse {
+  items: DashboardUsageOverviewUserItem[]
+}
+
 export interface UsageOverviewParams {
   page?: number
   page_size?: number
@@ -283,6 +302,16 @@ export async function getDashboardModels(params?: {
   return data
 }
 
+export async function getDashboardUsageOverview(params?: {
+  limit?: number
+}): Promise<DashboardUsageOverviewResponse> {
+  const { data } = await apiClient.get<DashboardUsageOverviewResponse>(
+    '/usage/dashboard/usage-overview',
+    { params }
+  )
+  return data
+}
+
 export async function getUsageOverviewSummary(
   params?: Pick<UsageOverviewParams, 'start_date' | 'end_date'>
 ): Promise<UsageOverviewSummary> {
@@ -355,6 +384,7 @@ export const usageAPI = {
   getDashboardStats,
   getDashboardTrend,
   getDashboardModels,
+  getDashboardUsageOverview,
   getUsageOverviewSummary,
   getUsageOverviewUsers,
   getUsageOverviewAccounts,

@@ -279,6 +279,22 @@ type BatchAPIKeyUsageStats struct {
 	TotalActualCost float64 `json:"total_actual_cost"`
 }
 
+// DashboardUsageOverviewUserItem is a compact per-user summary for the user dashboard.
+type DashboardUsageOverviewUserItem struct {
+	UserID        int64      `json:"user_id"`
+	Username      string     `json:"username,omitempty"`
+	Email         string     `json:"email,omitempty"`
+	TodayCost     float64    `json:"today_cost"`
+	WeekCost      float64    `json:"week_cost"`
+	MonthCost     float64    `json:"month_cost"`
+	TotalCost     float64    `json:"total_cost"`
+	TodayRequests int64      `json:"today_requests"`
+	WeekRequests  int64      `json:"week_requests"`
+	MonthRequests int64      `json:"month_requests"`
+	TotalRequests int64      `json:"total_requests"`
+	LastUsedAt    *time.Time `json:"last_used_at,omitempty"`
+}
+
 // UsageOverviewSummary represents global aggregate usage visible on the shared
 // usage overview page.
 type UsageOverviewSummary struct {
@@ -298,8 +314,7 @@ type UsageOverviewSummary struct {
 	TodayCost        float64 `json:"today_cost"`
 }
 
-// UsageOverviewUserItem represents per-user aggregate usage. Identity fields
-// are omitted for non-admin callers and replaced by AnonymousUser.
+// UsageOverviewUserItem represents per-user aggregate usage.
 type UsageOverviewUserItem struct {
 	UserID          int64      `json:"user_id,omitempty"`
 	Username        string     `json:"username,omitempty"`
@@ -316,8 +331,7 @@ type UsageOverviewUserItem struct {
 	LastUsedAt      *time.Time `json:"last_used_at,omitempty"`
 }
 
-// UsageOverviewAccountItem represents per-account aggregate usage. Sensitive
-// account identity fields are omitted for non-admin callers.
+// UsageOverviewAccountItem represents per-account aggregate usage.
 type UsageOverviewAccountItem struct {
 	AccountID        int64      `json:"account_id,omitempty"`
 	Name             string     `json:"name,omitempty"`

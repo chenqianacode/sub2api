@@ -333,6 +333,15 @@ func (s *UsageService) GetBatchAPIKeyUsageStats(ctx context.Context, apiKeyIDs [
 	return stats, nil
 }
 
+// ListDashboardUsageOverviewUsers returns compact per-user usage for the user dashboard.
+func (s *UsageService) ListDashboardUsageOverviewUsers(ctx context.Context, todayStart, weekStart, monthStart time.Time, limit int) ([]usagestats.DashboardUsageOverviewUserItem, error) {
+	items, err := s.usageRepo.ListDashboardUsageOverviewUsers(ctx, todayStart, weekStart, monthStart, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list dashboard usage overview users: %w", err)
+	}
+	return items, nil
+}
+
 // GetUsageOverviewSummary returns shared global aggregate usage stats.
 func (s *UsageService) GetUsageOverviewSummary(ctx context.Context, startTime, endTime, todayStart time.Time) (*usagestats.UsageOverviewSummary, error) {
 	stats, err := s.usageRepo.GetUsageOverviewSummary(ctx, startTime, endTime, todayStart)

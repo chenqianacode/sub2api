@@ -3362,6 +3362,73 @@ func normalizeUsageOverviewPagination(page, pageSize int) (int, int, int) {
 	return page, pageSize, (page - 1) * pageSize
 }
 
+// ListDashboardUsageOverviewUsers returns a compact user ranking for the user dashboard.
+func (r *usageLogRepository) ListDashboardUsageOverviewUsers(ctx context.Context, todayStart, weekStart, monthStart time.Time, limit int) ([]usagestats.DashboardUsageOverviewUserItem, error) {
+	if limit < 1 {
+		limit = 6
+	}
+	if limit > 20 {
+		limit = 20
+	}
+
+	query := `
+		SELECT
+			ul.user_id,
+			COALESCE(u.username, '') AS username,
+			COALESCE(u.email, '') AS email,
+			COALESCE(SUM(ul.actual_cost) FILTER (WHERE ul.created_at >= $1), 0) AS today_cost,
+			COALESCE(SUM(ul.actual_cost) FILTER (WHERE ul.created_at >= $2), 0) AS week_cost,
+			COALESCE(SUM(ul.actual_cost) FILTER (WHERE ul.created_at >= $3), 0) AS month_cost,
+			COALESCE(SUM(ul.actual_cost), 0) AS total_cost,
+			COUNT(*) FILTER (WHERE ul.created_at >= $1) AS today_requests,
+			COUNT(*) FILTER (WHERE ul.created_at >= $2) AS week_requests,
+			COUNT(*) FILTER (WHERE ul.created_at >= $3) AS month_requests,
+			COUNT(*) AS total_requests,
+			MAX(ul.created_at) AS last_used_at
+		FROM usage_logs ul
+		JOIN users u ON u.id = ul.user_id AND u.deleted_at IS NULL
+		WHERE ul.user_id > 0
+		GROUP BY ul.user_id, u.username, u.email
+		ORDER BY month_cost DESC, total_cost DESC, total_requests DESC, ul.user_id ASC
+		LIMIT $4
+	`
+	rows, err := r.sql.QueryContext(ctx, query, todayStart, weekStart, monthStart, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]usagestats.DashboardUsageOverviewUserItem, 0, limit)
+	for rows.Next() {
+		var item usagestats.DashboardUsageOverviewUserItem
+		var lastUsedAt sql.NullTime
+		if err := rows.Scan(
+			&item.UserID,
+			&item.Username,
+			&item.Email,
+			&item.TodayCost,
+			&item.WeekCost,
+			&item.MonthCost,
+			&item.TotalCost,
+			&item.TodayRequests,
+			&item.WeekRequests,
+			&item.MonthRequests,
+			&item.TotalRequests,
+			&lastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		if lastUsedAt.Valid {
+			item.LastUsedAt = &lastUsedAt.Time
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 // ListUsageOverviewUsers lists aggregate usage grouped by user for the shared overview page.
 func (r *usageLogRepository) ListUsageOverviewUsers(ctx context.Context, startTime, endTime, todayStart time.Time, page, pageSize int) ([]usagestats.UsageOverviewUserItem, int64, error) {
 	page, pageSize, offset := normalizeUsageOverviewPagination(page, pageSize)
@@ -3441,8 +3508,9 @@ func (r *usageLogRepository) ListUsageOverviewAccounts(ctx context.Context, star
 	var total int64
 	countQuery := `
 		SELECT COUNT(DISTINCT account_id)
-		FROM usage_logs
-		WHERE created_at >= $1 AND created_at < $2 AND account_id > 0
+		FROM usage_logs ul
+		JOIN accounts a ON a.id = ul.account_id AND a.deleted_at IS NULL AND a.status = 'active'
+		WHERE ul.created_at >= $1 AND ul.created_at < $2 AND ul.account_id > 0
 	`
 	if err := scanSingleRow(ctx, r.sql, countQuery, []any{startTime, endTime}, &total); err != nil {
 		return nil, 0, err
@@ -3467,7 +3535,7 @@ func (r *usageLogRepository) ListUsageOverviewAccounts(ctx context.Context, star
 			COALESCE(SUM(COALESCE(ul.account_stats_cost, ul.total_cost) * COALESCE(ul.account_rate_multiplier, 1)) FILTER (WHERE ul.created_at >= $3), 0) AS today_cost,
 			MAX(ul.created_at) AS last_used_at
 		FROM usage_logs ul
-		LEFT JOIN accounts a ON a.id = ul.account_id
+		JOIN accounts a ON a.id = ul.account_id AND a.deleted_at IS NULL AND a.status = 'active'
 		WHERE ul.created_at >= $1 AND ul.created_at < $2 AND ul.account_id > 0
 		GROUP BY ul.account_id, a.name, a.extra, a.credentials, a.platform, a.type, a.status
 		ORDER BY total_account_cost DESC, total_requests DESC, ul.account_id ASC

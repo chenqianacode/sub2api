@@ -196,18 +196,6 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/usage-overview',
-    name: 'UsageOverview',
-    component: () => import('@/views/user/UsageOverviewView.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: false,
-      title: 'Usage Overview',
-      titleKey: 'usageOverview.title',
-      descriptionKey: 'usageOverview.description'
-    }
-  },
-  {
     path: '/redeem',
     name: 'Redeem',
     component: () => import('@/views/user/RedeemView.vue'),
@@ -680,7 +668,7 @@ let authInitialized = false
 const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
-const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/payment/airwallex', '/legal', '/usage-overview']
+const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/payment/airwallex', '/legal']
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
   '/auth/linuxdo/callback',

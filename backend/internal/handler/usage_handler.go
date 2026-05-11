@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -335,43 +334,37 @@ func usageOverviewTodayStart(c *gin.Context) time.Time {
 	return timezone.StartOfDayInUserLocation(timezone.NowInUserLocation(userTZ), userTZ)
 }
 
-func usageOverviewIsAdmin(c *gin.Context) bool {
-	role, ok := middleware2.GetUserRoleFromContext(c)
-	return ok && role == "admin"
-}
+// DashboardUsageOverview handles compact per-user usage for the user dashboard.
+// GET /api/v1/usage/dashboard/usage-overview
+func (h *UsageHandler) DashboardUsageOverview(c *gin.Context) {
+	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
 
-func anonymizeUsageOverviewUsers(items []usagestats.UsageOverviewUserItem, page, pageSize int) {
-	start := (page-1)*pageSize + 1
-	if start < 1 {
-		start = 1
-	}
-	for i := range items {
-		items[i].UserID = 0
-		items[i].Username = ""
-		items[i].Email = ""
-		items[i].AnonymousUser = fmt.Sprintf("User #%d", start+i)
-		items[i].TotalActualCost = 0
-		items[i].LastUsedAt = nil
-	}
-}
-
-func anonymizeUsageOverviewAccounts(items []usagestats.UsageOverviewAccountItem, page, pageSize int) {
-	start := (page-1)*pageSize + 1
-	if start < 1 {
-		start = 1
-	}
-	for i := range items {
-		platform := strings.TrimSpace(items[i].Platform)
-		if platform == "" {
-			platform = "Account"
+	limit := 6
+	if rawLimit := strings.TrimSpace(c.Query("limit")); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil {
+			response.BadRequest(c, "Invalid limit")
+			return
 		}
-		items[i].AccountID = 0
-		items[i].Name = ""
-		items[i].Email = ""
-		items[i].AnonymousAccount = fmt.Sprintf("%s #%d", platform, start+i)
-		items[i].TotalActualCost = 0
-		items[i].LastUsedAt = nil
+		limit = parsed
 	}
+
+	userTZ := c.Query("timezone")
+	now := timezone.NowInUserLocation(userTZ)
+	todayStart := timezone.StartOfDayInUserLocation(now, userTZ)
+	weekStart := todayStart.AddDate(0, 0, -6)
+	monthStart := todayStart.AddDate(0, -1, 0)
+
+	items, err := h.usageService.ListDashboardUsageOverviewUsers(c.Request.Context(), todayStart, weekStart, monthStart, limit)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"items": items})
 }
 
 // UsageOverviewSummary handles global usage summary visible to authenticated users.
@@ -409,9 +402,6 @@ func (h *UsageHandler) UsageOverviewUsers(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	if !usageOverviewIsAdmin(c) {
-		anonymizeUsageOverviewUsers(items, page, pageSize)
-	}
 
 	response.Paginated(c, items, total, page, pageSize)
 }
@@ -431,9 +421,6 @@ func (h *UsageHandler) UsageOverviewAccounts(c *gin.Context) {
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
-	}
-	if !usageOverviewIsAdmin(c) {
-		anonymizeUsageOverviewAccounts(items, page, pageSize)
 	}
 
 	response.Paginated(c, items, total, page, pageSize)
