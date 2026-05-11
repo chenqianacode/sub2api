@@ -10,7 +10,10 @@
             <UserDashboardUsageOverview :items="usageOverview" :loading="loadingUsageOverview" />
             <UserDashboardRecentUsage :data="recentUsage" :loading="loadingUsage" />
           </div>
-          <div class="lg:col-span-1"><UserDashboardQuickActions /></div>
+          <div class="space-y-6 lg:col-span-1">
+            <UserDashboardAccountUsageWindow />
+            <UserDashboardQuickActions />
+          </div>
         </div>
       </template>
     </div>
@@ -22,6 +25,7 @@ import { ref, computed, onMounted } from 'vue'; import { useAuthStore } from '@/
 import AppLayout from '@/components/layout/AppLayout.vue'; import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import UserDashboardStats from '@/components/user/dashboard/UserDashboardStats.vue'; import UserDashboardCharts from '@/components/user/dashboard/UserDashboardCharts.vue'
 import UserDashboardRecentUsage from '@/components/user/dashboard/UserDashboardRecentUsage.vue'; import UserDashboardQuickActions from '@/components/user/dashboard/UserDashboardQuickActions.vue'
+import UserDashboardAccountUsageWindow from '@/components/user/dashboard/UserDashboardAccountUsageWindow.vue'
 import UserDashboardUsageOverview from '@/components/user/dashboard/UserDashboardUsageOverview.vue'
 import type { UsageLog, TrendDataPoint, ModelStat } from '@/types'
 

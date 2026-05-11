@@ -155,6 +155,30 @@ type UsageProgress struct {
 	LimitRequests    int64        `json:"limit_requests,omitempty"`
 }
 
+// DashboardAccountUsageWindowItem is a compact, real usage window for dashboard display.
+type DashboardAccountUsageWindowItem struct {
+	Label            string     `json:"label"`
+	Requests         int64      `json:"requests"`
+	Tokens           int64      `json:"tokens"`
+	AccountCost      float64    `json:"account_cost"`
+	UserCost         float64    `json:"user_cost"`
+	StandardCost     float64    `json:"standard_cost"`
+	Utilization      float64    `json:"utilization"`
+	RemainingSeconds int        `json:"remaining_seconds"`
+	ResetsAt         *time.Time `json:"resets_at,omitempty"`
+}
+
+// DashboardAccountUsageWindow is loaded on demand by the user dashboard.
+type DashboardAccountUsageWindow struct {
+	AccountID int64                             `json:"account_id"`
+	Name      string                            `json:"name"`
+	Platform  string                            `json:"platform"`
+	Type      string                            `json:"type"`
+	Source    string                            `json:"source,omitempty"`
+	UpdatedAt *time.Time                        `json:"updated_at,omitempty"`
+	Windows   []DashboardAccountUsageWindowItem `json:"windows"`
+}
+
 // AntigravityModelQuota Antigravity 单个模型的配额信息
 type AntigravityModelQuota struct {
 	Utilization int    `json:"utilization"` // 使用率 0-100
@@ -419,6 +443,175 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64) (*U
 
 	// API Key账号不支持usage查询
 	return nil, fmt.Errorf("account type %s does not support usage query", account.Type)
+}
+
+// GetDashboardAccountUsageWindow returns the first active account that supports real usage windows.
+// cachedOnly avoids upstream calls and only uses already cached or locally available data.
+func (s *AccountUsageService) GetDashboardAccountUsageWindow(ctx context.Context, cachedOnly bool) (*DashboardAccountUsageWindow, error) {
+	accounts, err := s.accountRepo.ListActive(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list active accounts: %w", err)
+	}
+
+	for i := range accounts {
+		account := accounts[i]
+		if !supportsDashboardUsageWindow(&account) {
+			continue
+		}
+
+		var usage *UsageInfo
+		if cachedOnly {
+			usage, err = s.cachedDashboardUsageInfo(ctx, &account)
+		} else {
+			usage, err = s.GetUsage(ctx, account.ID)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("get account usage: %w", err)
+		}
+		if usage == nil {
+			continue
+		}
+
+		windows := make([]DashboardAccountUsageWindowItem, 0, 2)
+		if item, ok := dashboardWindowItem("5h", usage.FiveHour); ok {
+			windows = append(windows, item)
+		}
+		if item, ok := dashboardWindowItem("7d", usage.SevenDay); ok {
+			windows = append(windows, item)
+		}
+		if len(windows) == 0 {
+			continue
+		}
+
+		return &DashboardAccountUsageWindow{
+			AccountID: account.ID,
+			Name:      account.Name,
+			Platform:  account.Platform,
+			Type:      account.Type,
+			Source:    usage.Source,
+			UpdatedAt: usage.UpdatedAt,
+			Windows:   windows,
+		}, nil
+	}
+
+	return nil, nil
+}
+
+func (s *AccountUsageService) cachedDashboardUsageInfo(ctx context.Context, account *Account) (*UsageInfo, error) {
+	if account == nil {
+		return nil, nil
+	}
+	now := time.Now()
+
+	switch account.Platform {
+	case PlatformAnthropic:
+		if account.Type == AccountTypeOAuth {
+			if s.cache != nil {
+				if cached, ok := s.cache.apiCache.Load(account.ID); ok {
+					if cache, ok := cached.(*apiUsageCache); ok && cache.response != nil && time.Since(cache.timestamp) < apiCacheTTL {
+						usage := s.buildUsageInfo(cache.response, &now)
+						usage.Source = "cache"
+						s.addWindowStats(ctx, account, usage)
+						return usage, nil
+					}
+				}
+			}
+		}
+		if hasPassiveDashboardUsage(account) {
+			return s.GetPassiveUsage(ctx, account.ID)
+		}
+	case PlatformOpenAI:
+		usage := &UsageInfo{UpdatedAt: &now, Source: "cache"}
+		if progress := buildCodexUsageProgressFromExtra(account.Extra, "5h", now); progress != nil {
+			usage.FiveHour = progress
+		}
+		if progress := buildCodexUsageProgressFromExtra(account.Extra, "7d", now); progress != nil {
+			usage.SevenDay = progress
+		}
+		if usage.FiveHour == nil && usage.SevenDay == nil {
+			return nil, nil
+		}
+		if s.usageLogRepo != nil {
+			if stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, now.Add(-5*time.Hour)); err == nil && usage.FiveHour != nil {
+				usage.FiveHour.WindowStats = windowStatsFromAccountStats(stats)
+			}
+			if stats, err := s.usageLogRepo.GetAccountWindowStats(ctx, account.ID, now.Add(-7*24*time.Hour)); err == nil && usage.SevenDay != nil {
+				usage.SevenDay.WindowStats = windowStatsFromAccountStats(stats)
+			}
+		}
+		return usage, nil
+	case PlatformGemini:
+		return s.getGeminiUsage(ctx, account)
+	case PlatformAntigravity:
+		if s.cache != nil {
+			if cached, ok := s.cache.antigravityCache.Load(account.ID); ok {
+				if cache, ok := cached.(*antigravityUsageCache); ok {
+					ttl := antigravityCacheTTL(cache.usageInfo)
+					if time.Since(cache.timestamp) < ttl {
+						recalcAntigravityRemainingSeconds(cache.usageInfo)
+						return cache.usageInfo, nil
+					}
+				}
+			}
+		}
+	}
+
+	return nil, nil
+}
+
+func hasPassiveDashboardUsage(account *Account) bool {
+	if account == nil {
+		return false
+	}
+	if account.Type == AccountTypeSetupToken && account.SessionWindowEnd != nil {
+		return true
+	}
+	for _, key := range []string{
+		"passive_usage_sampled_at",
+		"session_window_utilization",
+		"passive_usage_7d_utilization",
+		"passive_usage_7d_reset",
+	} {
+		if _, ok := account.Extra[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func supportsDashboardUsageWindow(account *Account) bool {
+	if account == nil || !account.IsActive() {
+		return false
+	}
+	switch account.Platform {
+	case PlatformOpenAI, PlatformGemini, PlatformAntigravity:
+		return account.Type == AccountTypeOAuth
+	case PlatformAnthropic:
+		return account.Type == AccountTypeOAuth || account.Type == AccountTypeSetupToken
+	default:
+		return account.Type == AccountTypeOAuth || account.Type == AccountTypeSetupToken
+	}
+}
+
+func dashboardWindowItem(label string, progress *UsageProgress) (DashboardAccountUsageWindowItem, bool) {
+	if progress == nil {
+		return DashboardAccountUsageWindowItem{}, false
+	}
+
+	item := DashboardAccountUsageWindowItem{
+		Label:            label,
+		Utilization:      progress.Utilization,
+		RemainingSeconds: progress.RemainingSeconds,
+		ResetsAt:         progress.ResetsAt,
+	}
+	if progress.WindowStats != nil {
+		item.Requests = progress.WindowStats.Requests
+		item.Tokens = progress.WindowStats.Tokens
+		item.AccountCost = progress.WindowStats.Cost
+		item.UserCost = progress.WindowStats.UserCost
+		item.StandardCost = progress.WindowStats.StandardCost
+	}
+	return item, true
 }
 
 // GetPassiveUsage 从 Account.Extra 中的被动采样数据构建 UsageInfo，不调用外部 API。

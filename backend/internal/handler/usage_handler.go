@@ -18,15 +18,21 @@ import (
 
 // UsageHandler handles usage-related requests
 type UsageHandler struct {
-	usageService  *service.UsageService
-	apiKeyService *service.APIKeyService
+	usageService        *service.UsageService
+	apiKeyService       *service.APIKeyService
+	accountUsageService *service.AccountUsageService
 }
 
 // NewUsageHandler creates a new UsageHandler
-func NewUsageHandler(usageService *service.UsageService, apiKeyService *service.APIKeyService) *UsageHandler {
+func NewUsageHandler(usageService *service.UsageService, apiKeyService *service.APIKeyService, accountUsageService ...*service.AccountUsageService) *UsageHandler {
+	var accountUsage *service.AccountUsageService
+	if len(accountUsageService) > 0 {
+		accountUsage = accountUsageService[0]
+	}
 	return &UsageHandler{
-		usageService:  usageService,
-		apiKeyService: apiKeyService,
+		usageService:        usageService,
+		apiKeyService:       apiKeyService,
+		accountUsageService: accountUsage,
 	}
 }
 
@@ -332,6 +338,28 @@ func parseUsageOverviewTimeRange(c *gin.Context) (time.Time, time.Time) {
 func usageOverviewTodayStart(c *gin.Context) time.Time {
 	userTZ := c.Query("timezone")
 	return timezone.StartOfDayInUserLocation(timezone.NowInUserLocation(userTZ), userTZ)
+}
+
+// DashboardAccountWindow handles on-demand real account usage windows.
+// GET /api/v1/usage/dashboard/account-window
+func (h *UsageHandler) DashboardAccountWindow(c *gin.Context) {
+	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	if h.accountUsageService == nil {
+		response.BadRequest(c, "Account usage service unavailable")
+		return
+	}
+
+	cachedOnly, _ := strconv.ParseBool(c.DefaultQuery("cached_only", "false"))
+	window, err := h.accountUsageService.GetDashboardAccountUsageWindow(c.Request.Context(), cachedOnly)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, window)
 }
 
 // DashboardUsageOverview handles compact per-user usage for the user dashboard.
