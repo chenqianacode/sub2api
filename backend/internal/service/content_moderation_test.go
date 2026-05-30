@@ -300,6 +300,35 @@ func TestBuildContentModerationLog_RedactsInputExcerpt(t *testing.T) {
 	require.Contains(t, log.InputExcerpt, "[已脱敏]")
 }
 
+func TestBuildContentModerationLog_RecordsLatestUserInput(t *testing.T) {
+	svc := &ContentModerationService{}
+	cfg := defaultContentModerationConfig()
+	latest := "second user prompt " + strings.Repeat("完整输入", maxModerationInputRunes+16)
+	body, err := json.Marshal(map[string]any{
+		"messages": []map[string]string{
+			{"role": "system", "content": "system prompt"},
+			{"role": "user", "content": "first user prompt"},
+			{"role": "assistant", "content": "ok"},
+			{"role": "user", "content": latest},
+		},
+	})
+	require.NoError(t, err)
+	input := ContentModerationCheckInput{
+		RequestID: "req-1",
+		Endpoint:  "/v1/chat/completions",
+		Provider:  "openai",
+		Protocol:  ContentModerationProtocolOpenAIChat,
+		Body:      body,
+	}
+
+	log := svc.buildLog(input, cfg, ContentModerationActionAllow, false, "", 0, nil, trimRunes(latest, maxModerationInputRunes), nil, nil, "")
+
+	require.Equal(t, latest, log.InputExcerpt)
+	require.Greater(t, len([]rune(log.InputExcerpt)), maxModerationInputRunes)
+	require.NotContains(t, log.InputExcerpt, "first user prompt")
+	require.NotContains(t, log.InputExcerpt, "system prompt")
+}
+
 func TestRedactContentModerationSecrets_LongHexAndTokens(t *testing.T) {
 	input := "你哈市多大事cf5bbdc4cd508f3aaf0d2070d529d4a4ac29099f8ecc357f696df28e1df91554 token=abc123456789xyz Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signaturepart https://example.com/private/path?token=abc123"
 

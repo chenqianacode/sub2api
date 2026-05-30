@@ -16,7 +16,7 @@ services:
   # Sub2API Application
   # ===========================================================================
   sub2api:
-    image: ${SUB2API_IMAGE:-sub2api:local}
+    image: ${SUB2API_IMAGE:-sub2api:131}
     build:
       context: ..
       dockerfile: Dockerfile

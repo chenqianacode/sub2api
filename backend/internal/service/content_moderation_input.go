@@ -13,6 +13,32 @@ func ExtractContentModerationText(protocol string, body []byte) string {
 	return ExtractContentModerationInput(protocol, body).Text
 }
 
+func ExtractContentModerationLogText(protocol string, body []byte) string {
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return ""
+	}
+	var parts []string
+	var images []string
+	switch protocol {
+	case ContentModerationProtocolAnthropicMessages:
+		collectLastAnthropicUserMessage(gjson.GetBytes(body, "messages"), &parts, &images)
+	case ContentModerationProtocolOpenAIChat:
+		collectLastRoleMessage(gjson.GetBytes(body, "messages"), "user", &parts, &images)
+	case ContentModerationProtocolOpenAIResponses:
+		collectLastResponsesInput(gjson.GetBytes(body, "input"), &parts, &images)
+	case ContentModerationProtocolGemini:
+		collectLastGeminiContent(gjson.GetBytes(body, "contents"), &parts, &images)
+	case ContentModerationProtocolOpenAIImages:
+		addModerationText(&parts, gjson.GetBytes(body, "prompt").String())
+		collectContentValue(gjson.GetBytes(body, "images"), &parts, &images)
+	default:
+		collectLastResponsesInput(gjson.GetBytes(body, "input"), &parts, &images)
+		collectLastRoleMessage(gjson.GetBytes(body, "messages"), "user", &parts, &images)
+		collectLastGeminiContent(gjson.GetBytes(body, "contents"), &parts, &images)
+	}
+	return strings.Join(parts, "\n")
+}
+
 func ExtractContentModerationInput(protocol string, body []byte) ContentModerationInput {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return ContentModerationInput{}
