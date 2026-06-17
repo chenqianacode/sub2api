@@ -602,7 +602,7 @@ func dashboardWindowItem(label string, progress *UsageProgress) (DashboardAccoun
 
 	item := DashboardAccountUsageWindowItem{
 		Label:            label,
-		Utilization:      progress.Utilization,
+		Utilization:      dashboardWindowDisplayUtilization(label, progress.Utilization),
 		RemainingSeconds: progress.RemainingSeconds,
 		ResetsAt:         progress.ResetsAt,
 	}
@@ -614,6 +614,59 @@ func dashboardWindowItem(label string, progress *UsageProgress) (DashboardAccoun
 		item.StandardCost = progress.WindowStats.StandardCost
 	}
 	return item, true
+}
+
+func dashboardWindowDisplayUtilization(label string, utilization float64) float64 {
+	if label != "7d" {
+		return utilization
+	}
+	usage := utilization
+	if usage <= 0 {
+		return 0
+	}
+	if usage >= 100 {
+		return 100
+	}
+	return minFloat64(usage+dashboardSevenDayDisplayBoost(usage), 100)
+}
+
+func dashboardSevenDayDisplayBoost(utilization float64) float64 {
+	const (
+		boostStartUsage = 1.0
+		boostEndUsage   = 95.0
+		boostStartValue = 0.1
+		boostEndValue   = 5.0
+	)
+
+	usage := maxFloat64(minFloat64(utilization, 100), 0)
+	if usage <= 0 {
+		return 0
+	}
+	if usage <= boostStartUsage {
+		return usage * boostStartValue
+	}
+	if usage >= boostEndUsage {
+		return boostEndValue
+	}
+
+	// The displayed 7d boost grows gradually from +0.1 at 1% usage
+	// to +5.0 at 95% usage. This only affects the dashboard display value.
+	progress := (usage - boostStartUsage) / (boostEndUsage - boostStartUsage)
+	return boostStartValue + progress*(boostEndValue-boostStartValue)
+}
+
+func minFloat64(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxFloat64(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // GetPassiveUsage 从 Account.Extra 中的被动采样数据构建 UsageInfo，不调用外部 API。

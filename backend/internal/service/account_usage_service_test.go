@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"testing"
 	"time"
@@ -29,6 +30,34 @@ func (r *accountUsageCodexProbeRepo) SetRateLimited(_ context.Context, _ int64, 
 		r.rateLimitCh <- resetAt
 	}
 	return nil
+}
+
+func TestDashboardWindowItemSevenDayDisplayUtilization(t *testing.T) {
+	tests := []struct {
+		name        string
+		label       string
+		utilization float64
+		want        float64
+	}{
+		{name: "five hour unchanged", label: "5h", utilization: 95, want: 95},
+		{name: "seven day zero unchanged", label: "7d", utilization: 0, want: 0},
+		{name: "seven day one percent adds point one", label: "7d", utilization: 1, want: 1.1},
+		{name: "seven day middle usage grows boost gradually", label: "7d", utilization: 48, want: 50.55},
+		{name: "seven day ninety five reaches one hundred", label: "7d", utilization: 95, want: 100},
+		{name: "seven day one hundred capped", label: "7d", utilization: 100, want: 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item, ok := dashboardWindowItem(tt.label, &UsageProgress{Utilization: tt.utilization})
+			if !ok {
+				t.Fatal("dashboardWindowItem returned !ok")
+			}
+			if math.Abs(item.Utilization-tt.want) > 0.000001 {
+				t.Fatalf("Utilization = %v, want %v", item.Utilization, tt.want)
+			}
+		})
+	}
 }
 
 func TestShouldRefreshOpenAICodexSnapshot(t *testing.T) {
